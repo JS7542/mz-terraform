@@ -1,0 +1,157 @@
+resource "aws_vpc" "std20_ex_vpc" {
+    cidr_block = "10.0.0.0/16"
+    enable_dns_support   = true
+    enable_dns_hostnames = true
+    instance_tenancy     = "default"
+    region = "ap-east-1"
+
+    tags = {
+        Name = "std20-ex-vpc"
+    }
+}
+# ===============================================================
+# 2. 퍼블릭 서브넷 생성 블록
+# ===============================================================
+
+resource "aws_subnet" "std20_pub_subnet" {
+    vpc_id              = aws_vpc.std20_ex_vpc.id
+    cidr_block          = "10.0.1.0/24"
+    availability_zone   = "ap-east-1a"            
+
+    # 아래 두개는 퍼블릭 서브넷 설정
+    map_public_ip_on_launch = true
+    enable_resource_name_dns_a_record_on_launch = true
+
+    tags = {
+        Name  = "std20-ex-public-1a-subnet"
+    }
+}
+
+
+# ================================================================================================
+# 게이트웨이 설정
+# ================================================================================================
+
+# 인터넷 게이트웨이 설정
+resource "aws_internet_gateway" "std20_igw" {
+    vpc_id = aws_vpc.std20_ex_vpc.id
+
+    tags = {
+        Name = "std20-ex-igw"
+    }
+}
+
+
+
+# NAT 게이트웨이용 EIP 설정
+resource "aws_eip" "std20_nat_eip" {
+    domain = "vpc"
+    # instance = "" # 인스턴스용으로 사용할 경우 인스턴스의 id
+    tags = {
+        Name = "std20-ex-nat-eip"
+    }
+}
+
+# NAT 게이트웨이 설정
+resource "aws_nat_gateway" "std20_nat_gw" {
+    allocation_id = aws_eip.std20_nat_eip.id
+    # NAT 게이트웨이를 생성할 퍼블릭 서브넷 지정
+    subnet_id     = aws_subnet.std20_pub_subnet.id
+    # 인터넷 게이트웨이를 먼저 생성(완료) 되면 이후 NAT 게이트웨이를 생성하도록 의존성 설정
+    depends_on = [
+        aws_internet_gateway.std20_igw
+    ]
+    tags = {
+        Name = "std20-ex-nat-gw"
+    }
+}
+
+# ================================================================================================
+# 라우팅 테이블 설정
+# ================================================================================================
+
+resource "aws_route_table" "std20_pub_rt" {
+    vpc_id = aws_vpc.std20_ex_vpc.id
+
+    route {
+        cidr_block = "0.0.0.0/0"
+        gateway_id = aws_internet_gateway.std20_igw.id
+    }
+
+    tags = {
+        Name = "std20-ex-public-rt"
+    }
+}
+
+# ================================================================================================
+# 보안 그룹
+# ================================================================================================
+
+resource "aws_security_group" "std20_ex_sg" {
+    name        = "std20-ex-sg"
+    description = "Security group for std20-ex"
+    vpc_id      = aws_vpc.std20_ex_vpc.id
+    
+    dynamic "ingress" {
+        for_each = [80,443]
+        content {
+            from_port   = ingress.value
+            to_port     = ingress.value
+            protocol    = "tcp"
+            cidr_blocks = ["0.0.0.0/0"]
+        }
+    }
+
+
+    egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+}
+
+# ================================================================================================
+# NACL
+# ================================================================================================
+
+resource "aws_network_acl" "std20_ex_nacl" {
+    vpc_id = aws_vpc.std20_ex_vpc.id
+
+    ingress {
+        rule_no    = 100            # rule_no 는 중복되지 않게 작성 / ingress, egress 각각 중복되지 않게 작성
+        protocol   = "tcp"
+        action = "allow"
+        cidr_block = "0.0.0.0/0"
+        from_port = 80
+        to_port   = 80
+    }
+
+    ingress {
+        rule_no    = 110            # rule_no 는 중복되지 않게 작성
+        protocol   = "tcp"
+        action = "allow"
+        cidr_block = "0.0.0.0/0"
+        from_port = 443
+        to_port   = 443
+    }
+
+    egress {
+        rule_no    = 100
+        protocol   = "-1"
+        action     = "allow"
+        cidr_block = "0.0.0.0/0"
+        from_port = 0
+        to_port   = 0
+    }
+    tags = {
+        Name = "std20-ex-nacl"
+    }
+}
+
+# 서브넷 연결
+
+resource "aws_network_acl_association" "std20_ex_nacl_assoc" {
+    subnet_id      = aws_subnet.std20_pub_subnet.id
+    network_acl_id = aws_network_acl.std20_ex_nacl.id
+}
