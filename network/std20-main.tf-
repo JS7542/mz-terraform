@@ -1,0 +1,323 @@
+# terraform init : 테라폼 초기화
+# terraform plan : 테라폼을 통해 배포 가능한지 확인 ( --out=filename 옵션을 통해 plan 파일 생성 가능 )
+# terraform apply : 테라폼을 통해 실제 리소스를 배포 ( --auto-approve 옵션을 통해 자동 승인 가능 )
+# terraform destroy : 테라폼을 통해 배포된 리소스를 삭제 ( --auto-approve 옵션을 통해 자동 승인 가능 )
+
+
+resource "aws_vpc" "std20_vpc" {
+    cidr_block = var.vpc_cidr       # VPC의 CIDR 블록 설정
+    instance_tenancy = "default"    # 인스턴스 테넌시 설정 (default 또는 dedicated)
+    enable_dns_support = true       # DNS 지원 활성화 여부
+    enable_dns_hostnames = true     # DNS 호스트 이름 활성화 여부
+    tags = {                        # VPC에 적용할 태그 설정
+        Name = "${local.tag_header}vpc",
+    }
+}
+
+
+# ================================================================================================
+# 퍼블릭 서브넷 설정
+# ================================================================================================
+
+
+resource "aws_subnet" "std20_pub_subnet" {
+    # for_each = toset(local.azs)
+    count               = length(local.azs)
+    vpc_id              = aws_vpc.std20_vpc.id
+    cidr_block          = var.subnet_cidr[0][count.index]
+    availability_zone   = local.azs[count.index]            
+
+    # 아래 두개는 퍼블릭 서브넷 설정
+    map_public_ip_on_launch = true
+    enable_resource_name_dns_a_record_on_launch = true
+
+    tags = {
+        Name  = "${local.tag_header}public-${local.azs[count.index]}-subnet"
+    }
+}
+
+# ================================================================================================
+# 프라이빗 서브넷 설정
+# ================================================================================================
+
+resource "aws_subnet" "std20_pri_subnet" {
+    # for_each = toset(local.azs)
+    count               = length(local.azs)
+    vpc_id              = aws_vpc.std20_vpc.id
+    cidr_block          = var.subnet_cidr[1][count.index]
+    availability_zone   = local.azs[count.index]            
+
+    tags = {
+        Name  = "${local.tag_header}private-${local.azs[count.index]}-subnet"
+    }
+}
+# ================================================================================================
+# 게이트웨이 설정
+# ================================================================================================
+
+# 인터넷 게이트웨이 설정
+resource "aws_internet_gateway" "std20_igw" {
+    vpc_id = aws_vpc.std20_vpc.id
+
+    tags = {
+        Name = "${local.tag_header}igw"
+    }
+}
+
+
+
+# NAT 게이트웨이용 EIP 설정
+resource "aws_eip" "std20_nat_eip" {
+    domain = "vpc"
+
+    tags = {
+        Name = "${local.tag_header}nat-eip"
+    }
+}
+
+# NAT 게이트웨이 설정
+resource "aws_nat_gateway" "std20_nat_gw" {
+    allocation_id = aws_eip.std20_nat_eip.id
+    # NAT 게이트웨이를 생성할 퍼블릭 서브넷 지정
+    subnet_id     = aws_subnet.std20_pub_subnet[0].id
+    # 인터넷 게이트웨이를 먼저 생성(완료) 되면 이후 NAT 게이트웨이를 생성하도록 의존성 설정
+    depends_on = [
+        aws_internet_gateway.std20_igw
+    ]
+    tags = {
+        Name = "${local.tag_header}nat-gw"
+    }
+}
+
+
+# ================================================================================================
+# 라우트 테이블 설정
+# ================================================================================================
+
+
+# 생성
+# 퍼블릭 라우트 테이블 설정
+resource "aws_route_table" "std20_pub_rt" {
+    vpc_id = aws_vpc.std20_vpc.id
+    
+    tags = {
+        Name = "${local.tag_header}public-rt"
+    }
+}
+
+
+
+# 프라이빗 라우트 테이블 설정
+
+resource "aws_route_table" "std20_pri_rt" {
+  count  = length(local.azs)
+  vpc_id = aws_vpc.std20_vpc.id
+
+  tags = {
+    Name = "${local.tag_header}private-${local.azs[count.index]}-rt"
+  }
+}
+
+# 서브넷 라우트 테이블 연결
+
+resource "aws_route_table_association" "std20_pub_rt_assoc" {
+    for_each = {
+      "ap-east-1a" = aws_subnet.std20_pub_subnet[0].id
+      "ap-east-1b" = aws_subnet.std20_pub_subnet[1].id
+      "ap-east-1c" = aws_subnet.std20_pub_subnet[2].id
+    }
+    subnet_id      = each.value
+    route_table_id = aws_route_table.std20_pub_rt.id
+}
+
+resource "aws_route_table_association" "std20_pri_rt_assoc" {
+  count = length(local.azs)
+
+  subnet_id      = aws_subnet.std20_pri_subnet[count.index].id
+  route_table_id = aws_route_table.std20_pri_rt[count.index].id
+}
+
+
+# 라우팅 설정
+
+resource "aws_route" "std20_pub_rt_internet_access" {
+    route_table_id         = aws_route_table.std20_pub_rt.id
+    destination_cidr_block = "0.0.0.0/0"
+    gateway_id             = aws_internet_gateway.std20_igw.id
+}
+
+resource "aws_route" "std20_pri_rt_nat_access" {
+  count = length(local.azs)
+
+  route_table_id         = aws_route_table.std20_pri_rt[count.index].id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.std20_nat_gw.id
+}
+
+
+# ======================================================================
+# security group 설정
+# ======================================================================
+
+# ssh 접속 허용
+resource "aws_security_group" "std20_ssh_sg" {
+    name        = "${local.tag_header}ssh-sg"
+    description = "Security group for SSH access"
+    vpc_id      = aws_vpc.std20_vpc.id
+
+    # inbound
+    ingress {
+        from_port   = 22
+        to_port     = 22
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    # outbound
+    egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"      # 모든 프로토콜 허용
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+    tags = {
+        Name = "${local.tag_header}ssh-sg"
+    }
+
+}
+
+resource "aws_security_group" "std20_mysql_sg" {
+    name = "${local.tag_header}mysql-sg"
+    description = "Security group for MySQL access"
+    vpc_id      = aws_vpc.std20_vpc.id
+
+    # inbound
+    ingress {
+        from_port   = 3306
+        to_port     = 3306
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    # outbound
+    egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"      # 모든 프로토콜 허용
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    tags = {
+        Name = "${local.tag_header}mysql-sg"
+    }
+}
+
+resource "aws_security_group" "std20_external_alb_sg" {
+    name        = "${local.tag_header}external-alb-sg"
+    description = "Security group for web access"
+    vpc_id      = aws_vpc.std20_vpc.id
+
+    # inbound
+    ingress {
+        from_port   = 80
+        to_port     = 80
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    ingress {
+        from_port   = 443
+        to_port     = 443
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    # outbound
+    egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"      # 모든 프로토콜 허용
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    tags = {
+        Name = "${local.tag_header}external-alb-sg"
+    }
+}
+
+resource "aws_security_group" "allow_direct_web" {
+    name        = "${local.tag_header}allow-direct-web-sg"
+    description = "Security group for direct web access"
+    vpc_id      = aws_vpc.std20_vpc.id
+
+    # inbound
+    ingress {
+        from_port   = 80
+        to_port     = 80
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    ingress {
+        from_port   = 443
+        to_port     = 443
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    # outbound
+    egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"      # 모든 프로토콜 허용
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    tags = {
+        Name = "${local.tag_header}allow-direct-web-sg"
+    }
+}
+
+
+
+# ========= 프라이빗 웹 인스턴스용 보안 그룹 설정 ============
+resource "aws_security_group" "std20_internal_alb_sg" {
+    name        = "${local.tag_header}internal-alb-sg"
+    description = "Security group for private web access"
+    vpc_id      = aws_vpc.std20_vpc.id
+
+
+    # outbound
+    egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"      # 모든 프로토콜 허용
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    tags = {
+        Name = "${local.tag_header}internal-alb-sg"
+    }
+}
+
+# 보안그룹 규칙 추가 : 외부 ALB에서 내부 ALB로의 접근 허용
+resource "aws_security_group_rule" "allow_external_to_internal" {
+    type                     = "ingress"
+    from_port                = 80
+    to_port                  = 80
+    protocol                 = "tcp"
+    # 규칙 추가 할 보안 그룹 ID (내부 ALB)
+    security_group_id        = aws_security_group.std20_internal_alb_sg.id
+    # 소스 보안 그룹 ID (외부 ALB)
+    source_security_group_id = aws_security_group.std20_external_alb_sg.id
+}
+
+resource "aws_security_group_rule" "allow_external_to_internal_https" {
+    type                     = "ingress"
+    from_port                = 443
+    to_port                  = 443
+    protocol                 = "tcp"
+    security_group_id        = aws_security_group.std20_internal_alb_sg.id
+    source_security_group_id = aws_security_group.std20_external_alb_sg.id
+}
+

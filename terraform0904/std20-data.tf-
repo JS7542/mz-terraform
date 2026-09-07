@@ -1,0 +1,21 @@
+# data "리소스" "이름" {
+
+# }
+
+# data "aws_vpc" "vpc_id" {
+#     filter {
+#         name   = "tag:Name"       # 꼭 태그만 써야하는건 아님
+#         values = ["std20-vpc"]
+#     }
+# }
+
+
+data "aws_availability_zones" "available_az" {
+    state = "available"
+    
+}
+
+output "available_az" {
+    description = "The available AWS availability zones"
+    value       = local.azs
+}
