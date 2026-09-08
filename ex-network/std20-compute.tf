@@ -1,3 +1,7 @@
+# ===================================================================
+# 이미지 생성 
+# 이미지 생성 완료 후 주석 처리
+# ===================================================================
 resource "aws_instance" "std20_web_instance" {
     #ami
     ami             = "ami-0ed4602584620d2fa"     # ap-east-1 / Ubuntu 24.04 LTS
@@ -53,11 +57,16 @@ output "std20_web_instance_public_ip" {
 # ===================================================================
 # AMI 이미지 생성
 # ===================================================================
+
 resource "aws_ami_from_instance" "std20_web_instance_ami" {
     name               = "${local.tag_header}web-instance-ami"
     source_instance_id = aws_instance.std20_web_instance.id
     # 재부팅 하여 이미지 생성(권장) : false
     snapshot_without_reboot = false
+
+    tags = {
+        Name = "${local.tag_header}web-instance-ami"
+    }
 }
 
 # ===================================================================
@@ -71,4 +80,57 @@ resource "aws_key_pair" "std20_terra_keypair" {
         Name = "${local.tag_header}terra-keypair"
     }
 
+}
+
+
+# ===================================================================
+# 데이터의 이미지를 가져와 인스턴스 생성
+# ===================================================================
+# resource "aws_instance" "std20_web_instance_from_data" {
+#     ami             = data.aws_ami.std20_local_nginx_ami.id
+#     instance_type   = "t3.nano"
+#     key_name       = "std20-keypair"
+#     subnet_id     = aws_subnet.std20_pub_subnet[local.azs[1]].id
+#     vpc_security_group_ids = [
+#         aws_security_group.std20_ssh_sg.id,
+#         aws_security_group.std20_external_alb_sg.id
+#     ]
+
+#     tags = {
+#         Name = "${local.tag_header}web-instance-from-data"
+#     }
+# }
+
+
+# ===================================================================
+# 시작 템플릿 생성
+# ===================================================================
+resource "aws_launch_template" "std20_web_instance_lt" {
+    name_prefix   = "${local.tag_header}web-instance-lt-"
+    image_id      = local.ami_id
+    instance_type = "t3.nano"
+
+    vpc_security_group_ids = [
+        aws_security_group.std20_ssh_sg.id,
+        aws_security_group.std20_external_alb_sg.id
+    ]
+
+    user_data = base64encode(<<-EOF
+        #!/bin/bash
+        systemctl start nginx
+        systemctl enable nginx
+    EOF
+    )
+
+    tag_specifications {
+        resource_type = "instance"
+
+        tags = {
+            Name = "${local.tag_header}web-instance-from-lt"
+        }
+    }
+
+    tags = {
+        Name = "${local.tag_header}web-instance-lt"
+    }
 }

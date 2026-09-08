@@ -27,7 +27,7 @@ provider "aws" {
     default_tags {          
         tags = {                                                # 일반적으로 이렇게 입력하지 않고, variables.tf 등을 통해 관리함
             Owner = "std20"
-            Class = "biap17"
+            Class = "bipa17"
         }
     }
 }

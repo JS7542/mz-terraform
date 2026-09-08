@@ -3,5 +3,18 @@ data "aws_availability_zones" "available_az" {
     state = "available"
 }
 
+data "aws_ami" "std20_local_nginx_ami" {
+    most_recent = true
+    owners      = ["self"]  # Canonical (Ubuntu) 소유자 ID
 
-# https://docs.aws.amazon.com/cli/latest/reference/
+    filter {
+        name   = "tag:Name"
+        values = ["${local.tag_header}web-instance-ami"]
+    }
+
+    filter {
+        name   = "tag:Owner"
+        values = ["std20"]
+    }
+
+}
