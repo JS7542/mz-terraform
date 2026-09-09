@@ -1,3 +1,4 @@
+
 # 현재 사용 가능한 AWS 가용 영역(Availability Zones) 정보를 리스트 형태로 반환
 data "aws_availability_zones" "available_az" {
     state = "available"
@@ -26,6 +27,17 @@ data "aws_subnets" "public_subnet_ids" {
             "${local.tag_header}public-1a-subnet",
             "${local.tag_header}public-1b-subnet",
             "${local.tag_header}public-1c-subnet",
+        ]
+    }
+}
+
+data "aws_subnets" "private_subnet_ids" {
+    filter {
+        name    = "tag:Name"
+        values  = [
+            "${local.tag_header}private-1a-subnet",
+            "${local.tag_header}private-1b-subnet",
+            "${local.tag_header}private-1c-subnet",
         ]
     }
 }

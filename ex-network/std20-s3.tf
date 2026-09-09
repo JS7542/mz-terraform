@@ -12,7 +12,9 @@ resource "aws_s3_bucket" "std20_terraform_ex_bucket" {
     # 객체 잠금
     object_lock_enabled     = false # default(false)
 
-    tags = { Name = "${local.tag_header}terraform-ex-bucket" }
+    tags = { 
+        Name = "${local.tag_header}terraform-ex-bucket" 
+        }
 }
 
 # ################################################################################
