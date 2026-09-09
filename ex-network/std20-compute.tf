@@ -118,10 +118,11 @@ resource "aws_launch_template" "std20_web_instance_lt" {
     user_data = base64encode(<<-EOF
         #!/bin/bash
         systemctl start nginx
-        systemctl enable nginx
+        systemctl enable nginx    
+
     EOF
     )
-
+    
     tag_specifications {
         resource_type = "instance"
 

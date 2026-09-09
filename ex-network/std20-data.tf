@@ -18,3 +18,14 @@ data "aws_ami" "std20_local_nginx_ami" {
     }
 
 }
+
+data "aws_subnets" "public_subnet_ids" {
+    filter {
+        name    = "tag:Name"
+        values  = [
+            "${local.tag_header}public-1a-subnet",
+            "${local.tag_header}public-1b-subnet",
+            "${local.tag_header}public-1c-subnet",
+        ]
+    }
+}
