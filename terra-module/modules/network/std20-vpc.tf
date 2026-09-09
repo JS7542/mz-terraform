@@ -23,6 +23,8 @@ resource "aws_vpc" "this" {
 resource "aws_subnet" "create_subnet" {
     for_each = local.subnet_map
     vpc_id     = aws_vpc.this.id
+
+
     cidr_block = each.value.cidr
     availability_zone = each.value.az
 
@@ -61,14 +63,14 @@ resource "aws_eip" "this" {
     }
 }
 
-# resource "aws_nat_gateway" "this" {
-#     allocation_id = aws_eip.this.id
-#     subnet_id    = aws_subnet.create-subnet[0].id
+resource "aws_nat_gateway" "this" {
+    allocation_id = aws_eip.this.id
+    subnet_id = aws_subnet.create_subnet["public-1a"].id
 
-#     tags = {
-#         Name = "${local.tag_header}nat-gateway"
-#     }
-# }
+    tags = {
+        Name = "${local.tag_header}nat-gateway"
+    }
+}
 
 # ======================================================================
 # 라우트 테이블 설정 (필요시)
@@ -140,13 +142,13 @@ resource "aws_route" "std20_pub_rt_to_igw" {
 }
 
 # 프라이빗 --> NAT 게이트웨이
-# resource "aws_route" "std20_pri_rt_to_nat" {
-#     for_each = {
-#         for key, subnet in local.subnet_map :
-#         key => subnet
-#         if subnet.type == "private"
-#     }
-#     route_table_id         = aws_route_table.std20_pri_rt[each.key].id
-#     destination_cidr_block = "0.0.0.0/0"
-#     nat_gateway_id         = aws_nat_gateway.this.id
-# }
+resource "aws_route" "std20_pri_rt_to_nat" {
+    for_each = {
+        for key, subnet in local.subnet_map :
+        key => subnet
+        if subnet.type == "private"
+    }
+    route_table_id         = aws_route_table.std20_pri_rt[each.key].id
+    destination_cidr_block = "0.0.0.0/0"
+    nat_gateway_id         = aws_nat_gateway.this.id
+}
