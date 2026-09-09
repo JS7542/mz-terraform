@@ -14,6 +14,14 @@ locals {
     region          = var.region
     owner           = var.owner
     vpc_cidr        = var.vpc_cidr
-
+    vpc_cidr_header = "${split(".", local.vpc_cidr)[0]}.${split(".", local.vpc_cidr)[1]}"
+    subnet_map      = merge([
+        for idx, key in ["public","private"] : {
+            for i, az_name in local.az_names :"${key}-${split("-", az_name)[2]}" => {
+                type        = key
+                az          = az_name
+                cidr        = "${local.vpc_cidr_header}.${idx*10+1+i}.0/24"
+            }
+        }
+    ]...)
 }
-

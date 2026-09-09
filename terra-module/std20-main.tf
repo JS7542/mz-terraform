@@ -14,8 +14,16 @@ module "network" {
     owner               = local.owner
     vpc_cidr            = local.vpc_cidr
     tag_header          = local.tag_header
+    subnet_map          = local.subnet_map
 }
 
-output "vpc_id" {
-    value = module.network.vpc_id
-}
+# output "vpc_id" {
+#     value = module.network.vpc_id
+# }
+# output "vpc_cidr" {
+#     value = module.network.vpc_cidr
+# }
+
+# output "subnet_map" {
+#     value = local.subnet_map
+# }

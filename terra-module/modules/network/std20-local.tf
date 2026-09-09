@@ -10,6 +10,6 @@ locals {
     tag_header      = var.tag_header
     owner           = var.owner
     vpc_cidr        = var.vpc_cidr
-
+    subnet_map      = var.subnet_map
 }
 

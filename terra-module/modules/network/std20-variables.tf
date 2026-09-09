@@ -68,3 +68,13 @@ variable "tag_header" {
   default     = ""
   
 }
+
+variable "subnet_map" {
+  description = "The mapping of subnets with their CIDR blocks and availability zones"
+  type        = map(object({
+    type = string
+    az   = string
+    cidr = string
+  }))
+  default     = {}
+}
