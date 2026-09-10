@@ -41,7 +41,7 @@ resource "aws_secretsmanager_secret_version" "std20_mysql_password_value" {
         host        = aws_rds_cluster.std20_mysql_cluster.endpoint
         port        = 3306
         username    = "std20"
-        password    = "melt7542"
+        password    = random_password.std20_random_password.result
     })
 }
 
@@ -52,7 +52,6 @@ resource "random_password" "std20_random_password" {
     special             = true
     override_special    = "!#$%&*()-_=+[]{}<>:?"
 }
-
 
 
 # ================================================================================
@@ -111,11 +110,16 @@ resource "aws_secretsmanager_secret_rotation" "std20_mysql_secret_rotation" {
 
 # 1. 서브넷 그룹 생성
 resource "aws_db_subnet_group" "std20_db_subnet_group" {
-    name    = "${local.tag_header}db-subnet-group"
+    name = "${local.tag_header}db-subnet-group"
 
-    subnet_ids  = data.aws_subnets.private_subnet_ids.ids
+    subnet_ids = [
+        for subnet in aws_subnet.std20_pri_subnet :
+        subnet.id
+    ]
 
-    tags = {Name = "${local.tag_header}db-subnet-group"}
+    tags = {
+        Name = "${local.tag_header}db-subnet-group"
+    }
 }
 
 # 2. RDS 클러스터 생성 : RDS MySQL Multi-AZ DB Cluster
@@ -142,7 +146,7 @@ resource "aws_rds_cluster" "std20_mysql_cluster" {
 
     database_name               = "testdb"
     master_username             = "std20"
-    master_password             =  random_password.std20_random_password.result
+    master_password             =  random_password.std20_mysql_password.result
 
     db_subnet_group_name         = aws_db_subnet_group.std20_db_subnet_group.name
     vpc_security_group_ids       = [aws_security_group.std20_mysql_sg.id]
@@ -162,4 +166,123 @@ resource "aws_rds_cluster" "std20_mysql_cluster" {
     tags = {
         Name = "${local.tag_header}mysql-cluster"
     }
+}
+
+# ================================================================================
+# 프록시 구성
+# ================================================================================
+
+# 프록시 구성을위한 정책과 역할 생성
+
+resource "aws_iam_role" "std20_mysql_proxy_role" {
+    name = "${local.tag_header}mysql-proxy-role"
+
+    assume_role_policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+            {
+                Action = "sts:AssumeRole"
+                Effect = "Allow"
+                Principal = {
+                    Service = "rds.amazonaws.com"
+                }
+            }
+        ]
+    })
+
+    tags = {
+        Name = "${local.tag_header}mysql-proxy-role"
+    }
+}
+
+
+resource "aws_iam_role_policy" "std20_mysql_proxy_policy" {
+    name = "${local.tag_header}mysql-proxy-policy"
+    role = aws_iam_role.std20_mysql_proxy_role.id
+
+    policy = jsonencode({
+        Version = "2012-10-17"
+        Statement = [
+            {
+                Action = [
+                    "secretsmanager:GetSecretValue"
+                ]
+                Effect   = "Allow"
+                Resource = "*"
+            }
+        ]
+    })
+
+    # 태그 지원 X
+}
+
+# ================================================================================
+# 프록시 생성
+# ================================================================================
+resource "aws_db_proxy" "std20_mysql_proxy" {
+    name                        = "${local.tag_header}mysql-proxy"
+
+    # 엔진
+    engine_family               = "MYSQL"
+
+    # 클라이언트에서 프록시와의 연결 이후 특정 행위가 없더라도 연결을 유지해주는 시간
+    idle_client_timeout         = 1800   # 30분
+
+    # 상시 적용 : 클라이언트와 프록시 간 데이터 암호화
+    require_tls                 = true
+
+
+    vpc_subnet_ids              = [
+        aws_subnet.std20_pri_subnet[local.azs[0]].id, 
+        aws_subnet.std20_pri_subnet[local.azs[1]].id,
+        aws_subnet.std20_pri_subnet[local.azs[2]].id
+        ]
+
+    # Secret Manager 사용 권한 설정
+    role_arn                    = aws_iam_role.std20_mysql_proxy_role.arn
+
+    # 보안 그룹 설정
+    vpc_security_group_ids       = [
+        aws_security_group.std20_mysql_sg.id
+    ]
+
+
+    # 인증 설정부
+    # REQUIRED: IAM 토큰을 이용하여 로그인
+    # DISABLED: 일반 DB 계정 / 보안 암호를 이용한 인증 사용
+    auth {
+        iam_auth = "DISABLED"
+        auth_scheme = "SECRETS"
+        secret_arn = aws_secretsmanager_secret.std20_mysql_password.arn
+    }
+}
+
+# ================================================================================
+# Proxy의 기본 타겟 그룹 생성 및 연결
+# ================================================================================
+resource "aws_db_proxy_default_target_group" "std20_mysql_proxy_default_target_group" {
+    db_proxy_name                           = aws_db_proxy.std20_mysql_proxy.name
+
+
+    # 접속자들 관리 환경 정의
+    connection_pool_config {
+        # 세션 인증 유지 시간 (초) 
+        connection_borrow_timeout           = 300
+        # 최대 연결 수 비율 (기본값: 100)
+        max_connections_percent             = 100
+        # 최대 연결 수 중 idle 상태의 연결을 유지 시킬 비율 (기본값: 50)
+        max_idle_connections_percent        = 50
+        session_pinning_filters             = ["EXCLUDE_VARIABLE_SETS"]
+
+    }
+}
+
+resource "aws_db_proxy_target" "std20_mysql_proxy_target" {
+    # proxy와의 연결 구성
+    db_proxy_name                           = aws_db_proxy.std20_mysql_proxy.name
+    # proxy target group과 연결 구성
+    target_group_name                       = aws_db_proxy_default_target_group.std20_mysql_proxy_default_target_group.name
+    # Database 와의 연결 구성
+    db_cluster_identifier                   = aws_rds_cluster.std20_mysql_cluster.id
+    
 }

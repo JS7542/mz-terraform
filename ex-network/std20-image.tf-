@@ -1,0 +1,60 @@
+# ===================================================================
+# AMI 생성용 임시 EC2
+# ===================================================================
+
+resource "aws_instance" "std20_web_image_instance" {
+    ami           = "ami-0ed4602584620d2fa"
+    instance_type = "t3.nano"
+
+    key_name = "std20-keypair"
+
+    root_block_device {
+        volume_size           = 20
+        volume_type           = "gp3"
+        delete_on_termination = true
+
+        tags = {
+            Name = "${local.tag_header}web-image-root-volume"
+        }
+    }
+
+    subnet_id = aws_subnet.std20_pub_subnet[local.azs[0]].id
+
+    vpc_security_group_ids = [
+        aws_security_group.std20_ssh_sg.id
+    ]
+
+    user_data = <<-EOF
+        #!/bin/bash
+
+        apt-get update -y
+        apt-get install -y nginx
+
+        echo '<h1>Hello, World!</h1>' > /var/www/html/index.html
+
+        systemctl enable nginx
+        systemctl restart nginx
+    EOF
+
+    tags = {
+        Name = "${local.tag_header}web-image-instance"
+    }
+}
+
+
+# ===================================================================
+# AMI 생성
+# ===================================================================
+
+resource "aws_ami_from_instance" "std20_web_ami" {
+    name = "${local.tag_header}web-instance-from-image-ami"
+    
+    source_instance_id = aws_instance.std20_web_image_instance.id
+
+    snapshot_without_reboot = false
+
+    tags = {
+        Name  = "${local.tag_header}web-instance-from-image-ami"
+        Owner = "std20"
+    }
+}

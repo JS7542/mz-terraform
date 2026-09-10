@@ -65,6 +65,8 @@ resource "aws_eip" "this" {
 
 resource "aws_nat_gateway" "this" {
     allocation_id = aws_eip.this.id
+
+    # map 형식으로 저장되기에 특정 키를 사용하여 접근해야 함
     subnet_id = aws_subnet.create_subnet["public-1a"].id
 
     tags = {

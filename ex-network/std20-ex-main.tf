@@ -208,6 +208,7 @@ resource "aws_security_group" "std20_mysql_sg" {
     }
 }
 
+
 resource "aws_security_group" "std20_external_alb_sg" {
     name        = "${local.tag_header}external-alb-sg"
     description = "Security group for web access"
