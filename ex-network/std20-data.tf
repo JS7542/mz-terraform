@@ -1,4 +1,5 @@
 
+# 기존에 있는 데이터 값 추출할때 사용
 # 현재 사용 가능한 AWS 가용 영역(Availability Zones) 정보를 리스트 형태로 반환
 data "aws_availability_zones" "available_az" {
     state = "available"
@@ -57,4 +58,9 @@ data "aws_ami" "eks_al2023_latest" {
         name   = "architecture"
         values = ["x86_64"]
     }
+}
+
+data "aws_vpc_endpoint_service" "s3" {
+    service           = "s3"
+    service_type      = "Gateway"
 }
