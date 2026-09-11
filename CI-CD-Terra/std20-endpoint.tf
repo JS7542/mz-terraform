@@ -18,12 +18,11 @@ resource "aws_vpc_endpoint" "std20_s3_endpoint" {
 
     route_table_ids = concat(
         [
-            for rt in aws_route_table.std20_pri_rt :
-            rt.id
+            for key in keys(aws_route_table.std20_pri_rt) :
+            aws_route_table.std20_pri_rt[key].id
         ],
         [
-            for rt in aws_route_table.std20_cluster_rt :
-            rt.id
+            aws_route_table.std20_cluster_rt.id
         ]
     )
     tags = {
@@ -46,15 +45,11 @@ resource "aws_vpc_endpoint" "std20_ecr_api_endpoint" {
     service_name      = "com.amazonaws.${local.region}.ecr.api"
     vpc_endpoint_type = "Interface"
 
-    route_table_ids = concat(
-        [
-            for rt in values(aws_route_table.std20_pri_rt) :
-            rt.id
-        ],
-        [
-            aws_route_table.std20_cluster_rt.id
-        ]
-    )
+    subnet_ids = [
+        for key, subnet in aws_subnet.create_subnet :
+        subnet.id
+        if local.subnet_map[key].type == "private"
+    ]
 
     # ECR 은 통신포트로 443을 사용함.
     security_group_ids = [
