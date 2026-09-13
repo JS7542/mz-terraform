@@ -1,33 +1,39 @@
-# std20-provider.tf
-# ======================================================
-# 1. 테라폼 실행 환경 설정 블록
-# ======================================================
+# =============================================================================
+# Terraform / Provider / Backend
+# =============================================================================
 
 terraform {
-    required_providers {
-        aws = {
-            source  = "hashicorp/aws"                           # 프로바이더 라이브러리 다운로드 경로
-            version = "~> 6.0"                                  # 사용할 버전 정의 (6.x 중 최신버전)
-        }
+  required_version = ">= 1.10.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
     }
 
-
-    # 협업을 위한 원격 상태 저장소 설정
-    backend "s3" {
-        bucket = "std20-terraform-state-bucket"                 # S3 버킷 이름
-        key    = "CI-CD-Terra/terraform.tfstate"                # 상태 파일 경로
-        region = "ap-east-1"                                    # S3 버킷이 위치한 리전
-        dynamodb_table = "std20-terraform-state-lock"           # 상태 잠금용 DynamoDB 테이블 이름
-        encrypt = true                                           # 상태 파일 암호화 여부
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
     }
+  }
+
+  # Terraform backend용 S3 버킷은 terraform init 이전에 존재해야 한다.
+  backend "s3" {
+    bucket       = "std20-terraform-state-bucket"
+    key          = "CI-CD-Terra/terraform.tfstate"
+    region       = "ap-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
 }
 
 provider "aws" {
-    region = "ap-east-1"                                        # AWS 리전 설정
-    default_tags {          
-        tags = {                                                # 일반적으로 이렇게 입력하지 않고, variables.tf 등을 통해 관리함
-            Owner = "std20"
-            Class = "bipa17"
-        }
+  region = var.region
+
+  default_tags {
+    tags = {
+      Owner = var.default_name
+      Class = "bipa17"
     }
+  }
 }
