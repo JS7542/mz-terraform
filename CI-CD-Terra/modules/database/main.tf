@@ -59,17 +59,17 @@ resource "aws_db_instance" "std20_mysql_instance" {
 # Secrets Manager
 # -----------------------------------------------------------------------------
 
-resource "aws_secretsmanager_secret" "std20_mysql_secret" {
-  name        = "${var.tag_header}mysql-secret"
+resource "aws_secretsmanager_secret" "std20_cicd_mysql_secret" {
+  name        = "${var.tag_header}cicd-mysql-secret"
   description = "MySQL credentials for RDS Proxy"
 
   tags = {
-    Name = "${var.tag_header}mysql-secret"
+    Name = "${var.tag_header}cicd-mysql-secret"
   }
 }
 
-resource "aws_secretsmanager_secret_version" "std20_mysql_secret" {
-  secret_id = aws_secretsmanager_secret.std20_mysql_secret.id
+resource "aws_secretsmanager_secret_version" "std20_cicd_mysql_secret" {
+  secret_id = aws_secretsmanager_secret.std20_cicd_mysql_secret.id
 
   secret_string = jsonencode({
     engine   = "mysql"
@@ -118,7 +118,7 @@ resource "aws_iam_role_policy" "std20_rds_proxy_policy" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = aws_secretsmanager_secret.std20_mysql_secret.arn
+        Resource = aws_secretsmanager_secret.std20_cicd_mysql_secret.arn
       },
       {
         Effect = "Allow"
@@ -153,11 +153,11 @@ resource "aws_db_proxy" "std20_mysql_proxy" {
   auth {
     auth_scheme = "SECRETS"
     iam_auth    = "DISABLED"
-    secret_arn  = aws_secretsmanager_secret.std20_mysql_secret.arn
+    secret_arn  = aws_secretsmanager_secret.std20_cicd_mysql_secret.arn
   }
 
   depends_on = [
-    aws_secretsmanager_secret_version.std20_mysql_secret,
+    aws_secretsmanager_secret_version.std20_cicd_mysql_secret,
     aws_iam_role_policy.std20_rds_proxy_policy
   ]
 

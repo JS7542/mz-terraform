@@ -1,5 +1,5 @@
 output "key_name" {
-  value = aws_key_pair.std20_keypair.key_name
+  value = var.key_name
 }
 
 output "web_instance_private_ip" {

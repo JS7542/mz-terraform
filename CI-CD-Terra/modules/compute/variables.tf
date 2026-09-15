@@ -28,8 +28,8 @@ variable "user_data" {
   type = string
 }
 
-variable "ssh_public_key_path" {
-  description = "ssh public key path supplied by root module"
-  type = string
+variable "key_name" {
+  description = "기존 AWS EC2 Key Pair 이름"
+  type        = string
 }
 

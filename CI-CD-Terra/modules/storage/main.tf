@@ -35,7 +35,7 @@ resource "aws_efs_mount_target" "std20_efs_mount_target" {
 # -----------------------------------------------------------------------------
 
 resource "aws_s3_bucket" "std20_static_web_bucket" {
-  bucket        = "${var.tag_header}static-web-${var.account_id}"
+  bucket        = "${var.tag_header}static-web-bucket"
   force_destroy = true
 
   tags = {
@@ -119,7 +119,7 @@ resource "aws_s3_object" "std20_static_web_error" {
 # -----------------------------------------------------------------------------
 
 resource "aws_s3_bucket" "std20_log_bucket" {
-  bucket        = "${var.tag_header}logs-${var.account_id}"
+  bucket        = "${var.tag_header}log-bucket"
   force_destroy = true
 
   tags = {

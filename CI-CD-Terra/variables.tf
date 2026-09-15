@@ -11,7 +11,7 @@ variable "region" {
 variable "default_name" {
   description = "Resource name prefix"
   type        = string
-  default     = "std20"
+  default     = "std20-cicd"
 }
 
 variable "vpc_cidr" {
@@ -43,10 +43,9 @@ variable "subnet_cidr" {
   ]
 }
 
-variable "ssh_public_key_path" {
-  description = "WSL SSH public key path"
+variable "key_name" {
+  description = "기존 AWS EC2 Key Pair 이름"
   type        = string
-  default     = "~/.ssh/id_rsa.pub"
 }
 
 variable "eks_version" {

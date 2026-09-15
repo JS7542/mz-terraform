@@ -9,19 +9,10 @@
 # - curl / unzip
 # =============================================================================
 
-resource "aws_key_pair" "std20_keypair" {
-  key_name   = "${var.tag_header}keypair"
-  public_key = file(pathexpand(var.ssh_public_key_path))
-
-  tags = {
-    Name = "${var.tag_header}keypair"
-  }
-}
-
 resource "aws_instance" "std20_web_instance" {
   ami           = var.ami_id
   instance_type = "t3.nano"
-  key_name      = aws_key_pair.std20_keypair.key_name
+  key_name      = var.key_name
 
   # network 모듈에서 전달받은 첫 번째 Private subnet 사용
   subnet_id = var.subnet_id

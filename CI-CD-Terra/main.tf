@@ -16,6 +16,7 @@ module "security" {
   vpc_cidr = var.vpc_cidr
 }
 
+
 module "compute" {
   source = "./modules/compute"
 
@@ -25,8 +26,9 @@ module "compute" {
   subnet_id = module.network.private_subnet_ids[0]
   ami_id = data.aws_ami.ubuntu_2404.id
   user_data = local.web_user_data
-  ssh_public_key_path = var.ssh_public_key_path
+  key_name = var.key_name
 }
+
 
 module "storage" {
   source = "./modules/storage"
