@@ -61,7 +61,7 @@ resource "aws_instance" "std20_web_instance" {
     http_tokens   = "required"
   }
 
-  user_data = var.user_data
+  # user_data = var.user_data
 
 
   tags = {
