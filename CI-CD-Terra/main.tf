@@ -39,20 +39,20 @@ module "storage" {
   account_id = data.aws_caller_identity.current.account_id
 }
 
-module "asg" {
-  source = "./modules/asg"
+# module "asg" {
+#   source = "./modules/asg"
 
-  tag_header = local.tag_header
-  vpc_id = module.network.vpc_id
-  internal_ssh_sg_id = module.security.internal_ssh_sg_id
-  external_alb_sg_id = module.security.external_alb_sg_id
-  web_sg_id = module.security.web_sg_id
-  public_subnet_ids = module.network.public_subnet_ids
-  private_subnet_ids = module.network.private_subnet_ids
-  ami_id = data.aws_ami.ubuntu_2404.id
-  user_data = local.web_user_data
-  key_name = module.compute.key_name
-}
+#   tag_header = local.tag_header
+#   vpc_id = module.network.vpc_id
+#   internal_ssh_sg_id = module.security.internal_ssh_sg_id
+#   external_alb_sg_id = module.security.external_alb_sg_id
+#   web_sg_id = module.security.web_sg_id
+#   public_subnet_ids = module.network.public_subnet_ids
+#   private_subnet_ids = module.network.private_subnet_ids
+#   ami_id = data.aws_ami.ubuntu_2404.id
+#   user_data = local.web_user_data
+#   key_name = module.compute.key_name
+# }
 
 module "eks" {
   source = "./modules/eks"
@@ -65,24 +65,24 @@ module "eks" {
   eks_version = var.eks_version
 }
 
-module "database" {
-  source = "./modules/database"
+# module "database" {
+#   source = "./modules/database"
 
-  tag_header = local.tag_header
-  mysql_sg_id = module.security.mysql_sg_id
-  private_subnet_ids = module.network.private_subnet_ids
-  db_name = var.db_name
-  db_username = var.db_username
-}
+#   tag_header = local.tag_header
+#   mysql_sg_id = module.security.mysql_sg_id
+#   private_subnet_ids = module.network.private_subnet_ids
+#   db_name = var.db_name
+#   db_username = var.db_username
+# }
 
-module "endpoints" {
-  source = "./modules/endpoints"
+# module "endpoints" {
+#   source = "./modules/endpoints"
 
-  tag_header = local.tag_header
-  vpc_id = module.network.vpc_id
-  endpoint_sg_id = module.security.endpoint_sg_id
-  private_subnet_ids = module.network.private_subnet_ids
-  s3_route_table_ids = module.network.s3_route_table_ids
-  region = var.region
-}
+#   tag_header = local.tag_header
+#   vpc_id = module.network.vpc_id
+#   endpoint_sg_id = module.security.endpoint_sg_id
+#   private_subnet_ids = module.network.private_subnet_ids
+#   s3_route_table_ids = module.network.s3_route_table_ids
+#   region = var.region
+# }
 

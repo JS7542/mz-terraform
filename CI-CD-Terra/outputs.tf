@@ -30,9 +30,9 @@ output "web_instance_private_ip" {
   value = module.compute.web_instance_private_ip
 }
 
-output "external_alb_dns_name" {
-  value = module.asg.external_alb_dns_name
-}
+# output "external_alb_dns_name" {
+#   value = module.asg.external_alb_dns_name
+# }
 
 output "eks_cluster_name" {
   value = module.eks.eks_cluster_name
@@ -42,12 +42,12 @@ output "eks_update_kubeconfig_command" {
   value = "aws eks update-kubeconfig --region ${var.region} --name ${module.eks.eks_cluster_name}"
 }
 
-output "mysql_endpoint" {
-  value     = module.database.mysql_endpoint
-  sensitive = true
-}
+## output "mysql_endpoint" {
+##   value     = module.database.mysql_endpoint
+##   sensitive = true
+## }
 
-output "mysql_proxy_endpoint" {
-  value     = module.database.mysql_proxy_endpoint
-  sensitive = true
-}
+## output "mysql_proxy_endpoint" {
+##   value     = module.database.mysql_proxy_endpoint
+##   sensitive = true
+## }

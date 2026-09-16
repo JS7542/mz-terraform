@@ -311,6 +311,17 @@ resource "aws_security_group" "std20_eks_node_sg" {
     protocol  = "-1"
     self      = true
   }
+   ingress {
+    description = "Allow ALB controller webhook from EKS control plane"
+
+    from_port = 9443
+    to_port   = 9443
+    protocol  = "tcp"
+
+    security_groups = [
+      aws_security_group.std20_eks_cluster_sg.id
+    ]
+  }
 
   egress {
     from_port   = 0
