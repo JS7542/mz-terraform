@@ -1,0 +1,1013 @@
+--- original/data.tf
++++ modified/data.tf
+@@ -1,35 +1,36 @@
+-# =============================================================================
+-# Data Sources
+-# =============================================================================
+-
+-data "aws_availability_zones" "available_az" {
+-  state = "available"
+-}
+-
+-data "aws_caller_identity" "current" {}
+-
+-# Ubuntu Server 24.04 LTS
+-data "aws_ami" "ubuntu_2404" {
+-  most_recent = true
+-  owners      = ["099720109477"]
+-
+-  filter {
+-    name   = "name"
+-    values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
+-  }
+-
+-  filter {
+-    name   = "architecture"
+-    values = ["x86_64"]
+-  }
+-
+-  filter {
+-    name   = "virtualization-type"
+-    values = ["hvm"]
+-  }
+-}
+-
+-# backend에서 사용 중인 Terraform state bucket
+-data "aws_s3_bucket" "terraform_state" {
+-  bucket = "std20-terraform-state-bucket"
+-}
++# 이번 실습에서는 기존 data 조회를 사용하지 않습니다.
++# # =============================================================================
++# # Data Sources
++# # =============================================================================
++#
++# data "aws_availability_zones" "available_az" {
++#   state = "available"
++# }
++#
++# data "aws_caller_identity" "current" {}
++#
++# # Ubuntu Server 24.04 LTS
++# data "aws_ami" "ubuntu_2404" {
++#   most_recent = true
++#   owners      = ["099720109477"]
++#
++#   filter {
++#     name   = "name"
++#     values = ["ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"]
++#   }
++#
++#   filter {
++#     name   = "architecture"
++#     values = ["x86_64"]
++#   }
++#
++#   filter {
++#     name   = "virtualization-type"
++#     values = ["hvm"]
++#   }
++# }
++#
++# # backend에서 사용 중인 Terraform state bucket
++# data "aws_s3_bucket" "terraform_state" {
++#   bucket = "std20-terraform-state-bucket"
++# }
+--- original/locals.tf
++++ modified/locals.tf
+@@ -1,6 +1,6 @@
+ locals {
+   tag_header = "${var.default_name}-"
+-  web_user_data = templatefile("${path.module}/templates/ec2-user-data.sh", {
+-    efs_dns_name = module.storage.efs_dns_name
+-  })
++  # web_user_data = templatefile("${path.module}/templates/ec2-user-data.sh", {
++  #   efs_dns_name = module.storage.efs_dns_name
++  # })
+ }
+--- original/main.tf
++++ modified/main.tf
+@@ -17,27 +17,27 @@
+ }
+ 
+ 
+-module "compute" {
+-  source = "./modules/compute"
+-
+-  tag_header = local.tag_header
+-  internal_ssh_sg_id = module.security.internal_ssh_sg_id
+-  web_sg_id = module.security.web_sg_id
+-  subnet_id = module.network.private_subnet_ids[0]
+-  ami_id = data.aws_ami.ubuntu_2404.id
+-  user_data = local.web_user_data
+-  key_name = var.key_name
+-}
++# module "compute" {
++#   source = "./modules/compute"
++#
++#   tag_header = local.tag_header
++#   internal_ssh_sg_id = module.security.internal_ssh_sg_id
++#   web_sg_id = module.security.web_sg_id
++#   subnet_id = module.network.private_subnet_ids[0]
++#   ami_id = data.aws_ami.ubuntu_2404.id
++#   user_data = local.web_user_data
++#   key_name = var.key_name
++# }
+ 
+ 
+-module "storage" {
+-  source = "./modules/storage"
+-
+-  tag_header = local.tag_header
+-  efs_sg_id = module.security.efs_sg_id
+-  private_subnet_ids_by_key = module.network.private_subnet_ids_by_key
+-  account_id = data.aws_caller_identity.current.account_id
+-}
++# module "storage" {
++#   source = "./modules/storage"
++#
++#   tag_header = local.tag_header
++#   efs_sg_id = module.security.efs_sg_id
++#   private_subnet_ids_by_key = module.network.private_subnet_ids_by_key
++#   account_id = data.aws_caller_identity.current.account_id
++# }
+ 
+ # module "asg" {
+ #   source = "./modules/asg"
+@@ -54,16 +54,16 @@
+ #   key_name = module.compute.key_name
+ # }
+ 
+-module "eks" {
+-  source = "./modules/eks"
+-
+-  tag_header = local.tag_header
+-  eks_cluster_sg_id = module.security.eks_cluster_sg_id
+-  eks_node_sg_id = module.security.eks_node_sg_id
+-  cluster_subnet_ids = module.network.cluster_subnet_ids
+-  key_name = module.compute.key_name
+-  eks_version = var.eks_version
+-}
++# module "eks" {
++#   source = "./modules/eks"
++#
++#   tag_header = local.tag_header
++#   eks_cluster_sg_id = module.security.eks_cluster_sg_id
++#   eks_node_sg_id = module.security.eks_node_sg_id
++#   cluster_subnet_ids = module.network.cluster_subnet_ids
++#   key_name = module.compute.key_name
++#   eks_version = var.eks_version
++# }
+ 
+ # module "database" {
+ #   source = "./modules/database"
+@@ -86,3 +86,20 @@
+ #   region = var.region
+ # }
+ 
++
++# 사용자가 제공한 CodeDeploy / CodePipeline 코드 추가
++module "cicd" {
++  source = "./modules/cicd"
++
++  tag_header = local.tag_header
++  security_group_ids = [
++    module.security.web_sg_id,
++    module.security.internal_ssh_sg_id
++  ]
++  subnet_ids        = module.network.cluster_subnet_ids
++  github_repository = var.github_repository
++  github_branch     = var.github_branch
++
++  # User Data 설치 전에 NAT 및 라우팅까지 준비합니다.
++  depends_on = [module.network]
++}
+--- original/moved.tf
++++ modified/moved.tf
+@@ -1,327 +1,328 @@
+-# 기존 root 리소스 주소를 모듈 주소로 이전합니다. 기존 state를 그대로 사용하세요.
+-
+-moved {
+-  from = aws_vpc.std20_vpc
+-  to = module.network.aws_vpc.std20_vpc
+-}
+-
+-moved {
+-  from = aws_subnet.create_subnet
+-  to = module.network.aws_subnet.create_subnet
+-}
+-
+-moved {
+-  from = aws_internet_gateway.std20_igw
+-  to = module.network.aws_internet_gateway.std20_igw
+-}
+-
+-moved {
+-  from = aws_eip.std20_nat_eip
+-  to = module.network.aws_eip.std20_nat_eip
+-}
+-
+-moved {
+-  from = aws_nat_gateway.std20_nat_gw
+-  to = module.network.aws_nat_gateway.std20_nat_gw
+-}
+-
+-moved {
+-  from = aws_route_table.std20_pub_rt
+-  to = module.network.aws_route_table.std20_pub_rt
+-}
+-
+-moved {
+-  from = aws_route_table.std20_pri_rt
+-  to = module.network.aws_route_table.std20_pri_rt
+-}
+-
+-moved {
+-  from = aws_route_table.std20_cluster_rt
+-  to = module.network.aws_route_table.std20_cluster_rt
+-}
+-
+-moved {
+-  from = aws_route_table_association.std20_pub_rt_assoc
+-  to = module.network.aws_route_table_association.std20_pub_rt_assoc
+-}
+-
+-moved {
+-  from = aws_route_table_association.std20_pri_rt_assoc
+-  to = module.network.aws_route_table_association.std20_pri_rt_assoc
+-}
+-
+-moved {
+-  from = aws_route_table_association.std20_cluster_rt_assoc
+-  to = module.network.aws_route_table_association.std20_cluster_rt_assoc
+-}
+-
+-moved {
+-  from = aws_route.std20_pub_rt_internet_access
+-  to = module.network.aws_route.std20_pub_rt_internet_access
+-}
+-
+-moved {
+-  from = aws_route.std20_pri_rt_nat_access
+-  to = module.network.aws_route.std20_pri_rt_nat_access
+-}
+-
+-moved {
+-  from = aws_route.std20_cluster_rt_nat_access
+-  to = module.network.aws_route.std20_cluster_rt_nat_access
+-}
+-
+-moved {
+-  from = aws_security_group.std20_bastion_sg
+-  to = module.security.aws_security_group.std20_bastion_sg
+-}
+-
+-moved {
+-  from = aws_security_group.std20_internal_ssh_sg
+-  to = module.security.aws_security_group.std20_internal_ssh_sg
+-}
+-
+-moved {
+-  from = aws_security_group.std20_external_alb_sg
+-  to = module.security.aws_security_group.std20_external_alb_sg
+-}
+-
+-moved {
+-  from = aws_security_group.std20_web_sg
+-  to = module.security.aws_security_group.std20_web_sg
+-}
+-
+-moved {
+-  from = aws_security_group.std20_internal_alb_sg
+-  to = module.security.aws_security_group.std20_internal_alb_sg
+-}
+-
+-moved {
+-  from = aws_security_group.std20_app_sg
+-  to = module.security.aws_security_group.std20_app_sg
+-}
+-
+-moved {
+-  from = aws_security_group.std20_database_sg
+-  to = module.security.aws_security_group.std20_database_sg
+-}
+-
+-moved {
+-  from = aws_security_group.std20_eks_cluster_sg
+-  to = module.security.aws_security_group.std20_eks_cluster_sg
+-}
+-
+-moved {
+-  from = aws_security_group.std20_eks_node_sg
+-  to = module.security.aws_security_group.std20_eks_node_sg
+-}
+-
+-moved {
+-  from = aws_vpc_security_group_ingress_rule.std20_eks_cluster_from_node
+-  to = module.security.aws_vpc_security_group_ingress_rule.std20_eks_cluster_from_node
+-}
+-
+-moved {
+-  from = aws_security_group.std20_endpoint_sg
+-  to = module.security.aws_security_group.std20_endpoint_sg
+-}
+-
+-moved {
+-  from = aws_security_group.std20_efs_sg
+-  to = module.security.aws_security_group.std20_efs_sg
+-}
+-
+-moved {
+-  from = aws_key_pair.std20_keypair
+-  to = module.compute.aws_key_pair.std20_keypair
+-}
+-
+-moved {
+-  from = aws_instance.std20_web_instance
+-  to = module.compute.aws_instance.std20_web_instance
+-}
+-
+-moved {
+-  from = aws_efs_file_system.std20_efs
+-  to = module.storage.aws_efs_file_system.std20_efs
+-}
+-
+-moved {
+-  from = aws_efs_mount_target.std20_efs_mount_target
+-  to = module.storage.aws_efs_mount_target.std20_efs_mount_target
+-}
+-
+-moved {
+-  from = aws_s3_bucket.std20_static_web_bucket
+-  to = module.storage.aws_s3_bucket.std20_static_web_bucket
+-}
+-
+-moved {
+-  from = aws_s3_bucket_public_access_block.std20_static_web_bucket
+-  to = module.storage.aws_s3_bucket_public_access_block.std20_static_web_bucket
+-}
+-
+-moved {
+-  from = aws_s3_bucket_website_configuration.std20_static_web_bucket
+-  to = module.storage.aws_s3_bucket_website_configuration.std20_static_web_bucket
+-}
+-
+-moved {
+-  from = aws_s3_bucket_policy.std20_static_web_bucket
+-  to = module.storage.aws_s3_bucket_policy.std20_static_web_bucket
+-}
+-
+-moved {
+-  from = aws_s3_object.std20_static_web_index
+-  to = module.storage.aws_s3_object.std20_static_web_index
+-}
+-
+-moved {
+-  from = aws_s3_object.std20_static_web_error
+-  to = module.storage.aws_s3_object.std20_static_web_error
+-}
+-
+-moved {
+-  from = aws_s3_bucket.std20_log_bucket
+-  to = module.storage.aws_s3_bucket.std20_log_bucket
+-}
+-
+-moved {
+-  from = aws_s3_bucket_public_access_block.std20_log_bucket
+-  to = module.storage.aws_s3_bucket_public_access_block.std20_log_bucket
+-}
+-
+-moved {
+-  from = aws_s3_bucket_versioning.std20_log_bucket
+-  to = module.storage.aws_s3_bucket_versioning.std20_log_bucket
+-}
+-
+-moved {
+-  from = aws_s3_bucket_server_side_encryption_configuration.std20_log_bucket
+-  to = module.storage.aws_s3_bucket_server_side_encryption_configuration.std20_log_bucket
+-}
+-
+-moved {
+-  from = aws_lb_target_group.std20_web_tg
+-  to = module.asg.aws_lb_target_group.std20_web_tg
+-}
+-
+-moved {
+-  from = aws_lb.std20_external_alb
+-  to = module.asg.aws_lb.std20_external_alb
+-}
+-
+-moved {
+-  from = aws_lb_listener.std20_external_alb_http
+-  to = module.asg.aws_lb_listener.std20_external_alb_http
+-}
+-
+-moved {
+-  from = aws_launch_template.std20_web_lt
+-  to = module.asg.aws_launch_template.std20_web_lt
+-}
+-
+-moved {
+-  from = aws_autoscaling_group.std20_web_asg
+-  to = module.asg.aws_autoscaling_group.std20_web_asg
+-}
+-
+-moved {
+-  from = aws_iam_role.std20_eks_cluster_role
+-  to = module.eks.aws_iam_role.std20_eks_cluster_role
+-}
+-
+-moved {
+-  from = aws_iam_role_policy_attachment.std20_eks_cluster_policy
+-  to = module.eks.aws_iam_role_policy_attachment.std20_eks_cluster_policy
+-}
+-
+-moved {
+-  from = aws_iam_role.std20_eks_worker_role
+-  to = module.eks.aws_iam_role.std20_eks_worker_role
+-}
+-
+-moved {
+-  from = aws_iam_role_policy_attachment.std20_eks_worker_policy
+-  to = module.eks.aws_iam_role_policy_attachment.std20_eks_worker_policy
+-}
+-
+-moved {
+-  from = aws_eks_cluster.std20_eks_cluster
+-  to = module.eks.aws_eks_cluster.std20_eks_cluster
+-}
+-
+-moved {
+-  from = aws_launch_template.std20_eks_node_lt
+-  to = module.eks.aws_launch_template.std20_eks_node_lt
+-}
+-
+-moved {
+-  from = aws_eks_node_group.std20_eks_node_group
+-  to = module.eks.aws_eks_node_group.std20_eks_node_group
+-}
+-
+-moved {
+-  from = random_password.std20_mysql_password
+-  to = module.database.random_password.std20_mysql_password
+-}
+-
+-moved {
+-  from = aws_db_subnet_group.std20_db_subnet_group
+-  to = module.database.aws_db_subnet_group.std20_db_subnet_group
+-}
+-
+-moved {
+-  from = aws_db_instance.std20_mysql_instance
+-  to = module.database.aws_db_instance.std20_mysql_instance
+-}
+-
+-moved {
+-  from = aws_secretsmanager_secret.std20_mysql_secret
+-  to = module.database.aws_secretsmanager_secret.std20_mysql_secret
+-}
+-
+-moved {
+-  from = aws_secretsmanager_secret_version.std20_mysql_secret
+-  to = module.database.aws_secretsmanager_secret_version.std20_mysql_secret
+-}
+-
+-moved {
+-  from = aws_iam_role.std20_rds_proxy_role
+-  to = module.database.aws_iam_role.std20_rds_proxy_role
+-}
+-
+-moved {
+-  from = aws_iam_role_policy.std20_rds_proxy_policy
+-  to = module.database.aws_iam_role_policy.std20_rds_proxy_policy
+-}
+-
+-moved {
+-  from = aws_db_proxy.std20_mysql_proxy
+-  to = module.database.aws_db_proxy.std20_mysql_proxy
+-}
+-
+-moved {
+-  from = aws_db_proxy_default_target_group.std20_mysql_proxy_default
+-  to = module.database.aws_db_proxy_default_target_group.std20_mysql_proxy_default
+-}
+-
+-moved {
+-  from = aws_db_proxy_target.std20_mysql_proxy_target
+-  to = module.database.aws_db_proxy_target.std20_mysql_proxy_target
+-}
+-
+-moved {
+-  from = aws_vpc_endpoint.std20_s3_endpoint
+-  to = module.endpoints.aws_vpc_endpoint.std20_s3_endpoint
+-}
+-
+-moved {
+-  from = aws_vpc_endpoint.std20_ecr_api_endpoint
+-  to = module.endpoints.aws_vpc_endpoint.std20_ecr_api_endpoint
+-}
+-
+-moved {
+-  from = aws_vpc_endpoint.std20_ecr_dkr_endpoint
+-  to = module.endpoints.aws_vpc_endpoint.std20_ecr_dkr_endpoint
+-}
+-
++# 기존 홍콩 state용 이동 선언입니다. 신규 뭄바이 state에서는 비활성화합니다.
++# # 기존 root 리소스 주소를 모듈 주소로 이전합니다. 기존 state를 그대로 사용하세요.
++#
++# moved {
++#   from = aws_vpc.std20_vpc
++#   to = module.network.aws_vpc.std20_vpc
++# }
++#
++# moved {
++#   from = aws_subnet.create_subnet
++#   to = module.network.aws_subnet.create_subnet
++# }
++#
++# moved {
++#   from = aws_internet_gateway.std20_igw
++#   to = module.network.aws_internet_gateway.std20_igw
++# }
++#
++# moved {
++#   from = aws_eip.std20_nat_eip
++#   to = module.network.aws_eip.std20_nat_eip
++# }
++#
++# moved {
++#   from = aws_nat_gateway.std20_nat_gw
++#   to = module.network.aws_nat_gateway.std20_nat_gw
++# }
++#
++# moved {
++#   from = aws_route_table.std20_pub_rt
++#   to = module.network.aws_route_table.std20_pub_rt
++# }
++#
++# moved {
++#   from = aws_route_table.std20_pri_rt
++#   to = module.network.aws_route_table.std20_pri_rt
++# }
++#
++# moved {
++#   from = aws_route_table.std20_cluster_rt
++#   to = module.network.aws_route_table.std20_cluster_rt
++# }
++#
++# moved {
++#   from = aws_route_table_association.std20_pub_rt_assoc
++#   to = module.network.aws_route_table_association.std20_pub_rt_assoc
++# }
++#
++# moved {
++#   from = aws_route_table_association.std20_pri_rt_assoc
++#   to = module.network.aws_route_table_association.std20_pri_rt_assoc
++# }
++#
++# moved {
++#   from = aws_route_table_association.std20_cluster_rt_assoc
++#   to = module.network.aws_route_table_association.std20_cluster_rt_assoc
++# }
++#
++# moved {
++#   from = aws_route.std20_pub_rt_internet_access
++#   to = module.network.aws_route.std20_pub_rt_internet_access
++# }
++#
++# moved {
++#   from = aws_route.std20_pri_rt_nat_access
++#   to = module.network.aws_route.std20_pri_rt_nat_access
++# }
++#
++# moved {
++#   from = aws_route.std20_cluster_rt_nat_access
++#   to = module.network.aws_route.std20_cluster_rt_nat_access
++# }
++#
++# moved {
++#   from = aws_security_group.std20_bastion_sg
++#   to = module.security.aws_security_group.std20_bastion_sg
++# }
++#
++# moved {
++#   from = aws_security_group.std20_internal_ssh_sg
++#   to = module.security.aws_security_group.std20_internal_ssh_sg
++# }
++#
++# moved {
++#   from = aws_security_group.std20_external_alb_sg
++#   to = module.security.aws_security_group.std20_external_alb_sg
++# }
++#
++# moved {
++#   from = aws_security_group.std20_web_sg
++#   to = module.security.aws_security_group.std20_web_sg
++# }
++#
++# moved {
++#   from = aws_security_group.std20_internal_alb_sg
++#   to = module.security.aws_security_group.std20_internal_alb_sg
++# }
++#
++# moved {
++#   from = aws_security_group.std20_app_sg
++#   to = module.security.aws_security_group.std20_app_sg
++# }
++#
++# moved {
++#   from = aws_security_group.std20_database_sg
++#   to = module.security.aws_security_group.std20_database_sg
++# }
++#
++# moved {
++#   from = aws_security_group.std20_eks_cluster_sg
++#   to = module.security.aws_security_group.std20_eks_cluster_sg
++# }
++#
++# moved {
++#   from = aws_security_group.std20_eks_node_sg
++#   to = module.security.aws_security_group.std20_eks_node_sg
++# }
++#
++# moved {
++#   from = aws_vpc_security_group_ingress_rule.std20_eks_cluster_from_node
++#   to = module.security.aws_vpc_security_group_ingress_rule.std20_eks_cluster_from_node
++# }
++#
++# moved {
++#   from = aws_security_group.std20_endpoint_sg
++#   to = module.security.aws_security_group.std20_endpoint_sg
++# }
++#
++# moved {
++#   from = aws_security_group.std20_efs_sg
++#   to = module.security.aws_security_group.std20_efs_sg
++# }
++#
++# moved {
++#   from = aws_key_pair.std20_keypair
++#   to = module.compute.aws_key_pair.std20_keypair
++# }
++#
++# moved {
++#   from = aws_instance.std20_web_instance
++#   to = module.compute.aws_instance.std20_web_instance
++# }
++#
++# moved {
++#   from = aws_efs_file_system.std20_efs
++#   to = module.storage.aws_efs_file_system.std20_efs
++# }
++#
++# moved {
++#   from = aws_efs_mount_target.std20_efs_mount_target
++#   to = module.storage.aws_efs_mount_target.std20_efs_mount_target
++# }
++#
++# moved {
++#   from = aws_s3_bucket.std20_static_web_bucket
++#   to = module.storage.aws_s3_bucket.std20_static_web_bucket
++# }
++#
++# moved {
++#   from = aws_s3_bucket_public_access_block.std20_static_web_bucket
++#   to = module.storage.aws_s3_bucket_public_access_block.std20_static_web_bucket
++# }
++#
++# moved {
++#   from = aws_s3_bucket_website_configuration.std20_static_web_bucket
++#   to = module.storage.aws_s3_bucket_website_configuration.std20_static_web_bucket
++# }
++#
++# moved {
++#   from = aws_s3_bucket_policy.std20_static_web_bucket
++#   to = module.storage.aws_s3_bucket_policy.std20_static_web_bucket
++# }
++#
++# moved {
++#   from = aws_s3_object.std20_static_web_index
++#   to = module.storage.aws_s3_object.std20_static_web_index
++# }
++#
++# moved {
++#   from = aws_s3_object.std20_static_web_error
++#   to = module.storage.aws_s3_object.std20_static_web_error
++# }
++#
++# moved {
++#   from = aws_s3_bucket.std20_log_bucket
++#   to = module.storage.aws_s3_bucket.std20_log_bucket
++# }
++#
++# moved {
++#   from = aws_s3_bucket_public_access_block.std20_log_bucket
++#   to = module.storage.aws_s3_bucket_public_access_block.std20_log_bucket
++# }
++#
++# moved {
++#   from = aws_s3_bucket_versioning.std20_log_bucket
++#   to = module.storage.aws_s3_bucket_versioning.std20_log_bucket
++# }
++#
++# moved {
++#   from = aws_s3_bucket_server_side_encryption_configuration.std20_log_bucket
++#   to = module.storage.aws_s3_bucket_server_side_encryption_configuration.std20_log_bucket
++# }
++#
++# moved {
++#   from = aws_lb_target_group.std20_web_tg
++#   to = module.asg.aws_lb_target_group.std20_web_tg
++# }
++#
++# moved {
++#   from = aws_lb.std20_external_alb
++#   to = module.asg.aws_lb.std20_external_alb
++# }
++#
++# moved {
++#   from = aws_lb_listener.std20_external_alb_http
++#   to = module.asg.aws_lb_listener.std20_external_alb_http
++# }
++#
++# moved {
++#   from = aws_launch_template.std20_web_lt
++#   to = module.asg.aws_launch_template.std20_web_lt
++# }
++#
++# moved {
++#   from = aws_autoscaling_group.std20_web_asg
++#   to = module.asg.aws_autoscaling_group.std20_web_asg
++# }
++#
++# moved {
++#   from = aws_iam_role.std20_eks_cluster_role
++#   to = module.eks.aws_iam_role.std20_eks_cluster_role
++# }
++#
++# moved {
++#   from = aws_iam_role_policy_attachment.std20_eks_cluster_policy
++#   to = module.eks.aws_iam_role_policy_attachment.std20_eks_cluster_policy
++# }
++#
++# moved {
++#   from = aws_iam_role.std20_eks_worker_role
++#   to = module.eks.aws_iam_role.std20_eks_worker_role
++# }
++#
++# moved {
++#   from = aws_iam_role_policy_attachment.std20_eks_worker_policy
++#   to = module.eks.aws_iam_role_policy_attachment.std20_eks_worker_policy
++# }
++#
++# moved {
++#   from = aws_eks_cluster.std20_eks_cluster
++#   to = module.eks.aws_eks_cluster.std20_eks_cluster
++# }
++#
++# moved {
++#   from = aws_launch_template.std20_eks_node_lt
++#   to = module.eks.aws_launch_template.std20_eks_node_lt
++# }
++#
++# moved {
++#   from = aws_eks_node_group.std20_eks_node_group
++#   to = module.eks.aws_eks_node_group.std20_eks_node_group
++# }
++#
++# moved {
++#   from = random_password.std20_mysql_password
++#   to = module.database.random_password.std20_mysql_password
++# }
++#
++# moved {
++#   from = aws_db_subnet_group.std20_db_subnet_group
++#   to = module.database.aws_db_subnet_group.std20_db_subnet_group
++# }
++#
++# moved {
++#   from = aws_db_instance.std20_mysql_instance
++#   to = module.database.aws_db_instance.std20_mysql_instance
++# }
++#
++# moved {
++#   from = aws_secretsmanager_secret.std20_mysql_secret
++#   to = module.database.aws_secretsmanager_secret.std20_mysql_secret
++# }
++#
++# moved {
++#   from = aws_secretsmanager_secret_version.std20_mysql_secret
++#   to = module.database.aws_secretsmanager_secret_version.std20_mysql_secret
++# }
++#
++# moved {
++#   from = aws_iam_role.std20_rds_proxy_role
++#   to = module.database.aws_iam_role.std20_rds_proxy_role
++# }
++#
++# moved {
++#   from = aws_iam_role_policy.std20_rds_proxy_policy
++#   to = module.database.aws_iam_role_policy.std20_rds_proxy_policy
++# }
++#
++# moved {
++#   from = aws_db_proxy.std20_mysql_proxy
++#   to = module.database.aws_db_proxy.std20_mysql_proxy
++# }
++#
++# moved {
++#   from = aws_db_proxy_default_target_group.std20_mysql_proxy_default
++#   to = module.database.aws_db_proxy_default_target_group.std20_mysql_proxy_default
++# }
++#
++# moved {
++#   from = aws_db_proxy_target.std20_mysql_proxy_target
++#   to = module.database.aws_db_proxy_target.std20_mysql_proxy_target
++# }
++#
++# moved {
++#   from = aws_vpc_endpoint.std20_s3_endpoint
++#   to = module.endpoints.aws_vpc_endpoint.std20_s3_endpoint
++# }
++#
++# moved {
++#   from = aws_vpc_endpoint.std20_ecr_api_endpoint
++#   to = module.endpoints.aws_vpc_endpoint.std20_ecr_api_endpoint
++# }
++#
++# moved {
++#   from = aws_vpc_endpoint.std20_ecr_dkr_endpoint
++#   to = module.endpoints.aws_vpc_endpoint.std20_ecr_dkr_endpoint
++# }
++#
+--- original/outputs.tf
++++ modified/outputs.tf
+@@ -6,41 +6,41 @@
+   value = module.network.vpc_id
+ }
+ 
+-output "terraform_state_bucket" {
+-  value = data.aws_s3_bucket.terraform_state.bucket
+-}
++# output "terraform_state_bucket" {
++#   value = data.aws_s3_bucket.terraform_state.bucket
++# }
+ 
+-output "static_web_bucket" {
+-  value = module.storage.static_web_bucket
+-}
++# output "static_web_bucket" {
++#   value = module.storage.static_web_bucket
++# }
+ 
+-output "static_web_website_endpoint" {
+-  value = module.storage.static_web_website_endpoint
+-}
++# output "static_web_website_endpoint" {
++#   value = module.storage.static_web_website_endpoint
++# }
+ 
+-output "log_bucket" {
+-  value = module.storage.log_bucket
+-}
++# output "log_bucket" {
++#   value = module.storage.log_bucket
++# }
+ 
+-output "efs_id" {
+-  value = module.storage.efs_id
+-}
++# output "efs_id" {
++#   value = module.storage.efs_id
++# }
+ 
+-output "web_instance_private_ip" {
+-  value = module.compute.web_instance_private_ip
+-}
++# output "web_instance_private_ip" {
++#   value = module.compute.web_instance_private_ip
++# }
+ 
+ # output "external_alb_dns_name" {
+ #   value = module.asg.external_alb_dns_name
+ # }
+ 
+-output "eks_cluster_name" {
+-  value = module.eks.eks_cluster_name
+-}
++# output "eks_cluster_name" {
++#   value = module.eks.eks_cluster_name
++# }
+ 
+-output "eks_update_kubeconfig_command" {
+-  value = "aws eks update-kubeconfig --region ${var.region} --name ${module.eks.eks_cluster_name}"
+-}
++# output "eks_update_kubeconfig_command" {
++#   value = "aws eks update-kubeconfig --region ${var.region} --name ${module.eks.eks_cluster_name}"
++# }
+ 
+ ## output "mysql_endpoint" {
+ ##   value     = module.database.mysql_endpoint
+@@ -51,3 +51,19 @@
+ ##   value     = module.database.mysql_proxy_endpoint
+ ##   sensitive = true
+ ## }
++
++output "asg_name" {
++  value = module.cicd.asg_name
++}
++output "connection_arn" {
++  value = module.cicd.connection_arn
++}
++output "pipeline_name" {
++  value = module.cicd.pipeline_name
++}
++output "codedeploy_app_name" {
++  value = module.cicd.codedeploy_app_name
++}
++output "deployment_group_name" {
++  value = module.cicd.deployment_group_name
++}
+--- original/providers.tf
++++ modified/providers.tf
+@@ -18,9 +18,11 @@
+   }
+ 
+   # Terraform backend용 S3 버킷은 terraform init 이전에 존재해야 한다.
++  # 기존 state와 분리하기 위해 key만 변경했습니다.
++  # 아래 region은 S3 상태 버킷이 있는 홍콩입니다. 배포 리전은 var.region(뭄바이).
+   backend "s3" {
+     bucket       = "std20-terraform-state-bucket"
+-    key          = "CI-CD-Terra/terraform.tfstate"
++    key          = "CI-CD-Terra-Mumbai/terraform.tfstate"
+     region       = "ap-east-1"
+     encrypt      = true
+     use_lockfile = true
+--- original/variables.tf
++++ modified/variables.tf
+@@ -5,7 +5,7 @@
+ variable "region" {
+   description = "AWS region"
+   type        = string
+-  default     = "ap-east-1"
++  default     = "ap-south-1"
+ }
+ 
+ variable "default_name" {
+@@ -26,19 +26,19 @@
+ 
+   default = [
+     {
+-      "ap-east-1a" = "10.0.1.0/24"
+-      "ap-east-1b" = "10.0.2.0/24"
+-      "ap-east-1c" = "10.0.3.0/24"
++      "ap-south-1a" = "10.0.1.0/24"
++      "ap-south-1b" = "10.0.2.0/24"
++      "ap-south-1c" = "10.0.3.0/24"
+     },
+     {
+-      "ap-east-1a" = "10.0.11.0/24"
+-      "ap-east-1b" = "10.0.12.0/24"
+-      "ap-east-1c" = "10.0.13.0/24"
++      "ap-south-1a" = "10.0.11.0/24"
++      "ap-south-1b" = "10.0.12.0/24"
++      "ap-south-1c" = "10.0.13.0/24"
+     },
+     {
+-      "ap-east-1a" = "10.0.21.0/24"
+-      "ap-east-1b" = "10.0.22.0/24"
+-      "ap-east-1c" = "10.0.23.0/24"
++      "ap-south-1a" = "10.0.21.0/24"
++      "ap-south-1b" = "10.0.22.0/24"
++      "ap-south-1c" = "10.0.23.0/24"
+     }
+   ]
+ }
+@@ -65,3 +65,13 @@
+   type        = string
+   default     = "std20"
+ }
++
++# 추가: 제공한 파이프라인의 GitHub Source 설정
++variable "github_repository" {
++  description = "GitHub 소유자/저장소 이름"
++  type = string
++}
++variable "github_branch" {
++  description = "GitHub 배포 브랜치"
++  type = string
++}
+--- original/terraform.tfvars
++++ modified/terraform.tfvars
+@@ -1,7 +1,11 @@
+-region = "ap-east-1"
++region = "ap-south-1"
+ default_name = "std20-cicd"
+ vpc_cidr = "10.0.0.0/16"
+ key_name = "std20-keypair"
+ eks_version = "1.35"
+ db_name = "testdb"
+ db_username = "std20"
++
++# 제공한 코드의 예제 값을 유지했습니다. 적용 전에 본인 저장소로 수정하세요.
++github_repository = "csjin21c/aws-cicd-pipeline"
++github_branch     = "main"
